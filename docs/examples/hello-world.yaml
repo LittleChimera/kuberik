@@ -1,0 +1,19 @@
+---
+apiVersion: core.kuberik.io/v1alpha1
+kind: Movie
+metadata:
+  name: hello-world
+spec:
+  screenplay:
+    scenes:
+      - name: hello-world
+        frames:
+          - name: hello-world
+            action:
+              template:
+                spec:
+                  containers:
+                  - name: hello-world
+                    image: "alpine:latest"
+                    command: ["echo"]
+                    args: ["Hello World!"]

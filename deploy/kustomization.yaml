@@ -1,0 +1,9 @@
+---
+resources:
+- operator.yaml
+- role.yaml
+- role_binding.yaml
+- service_account.yaml
+
+commonLabels:
+  app: kuberik

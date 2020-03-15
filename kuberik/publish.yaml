@@ -1,0 +1,99 @@
+---
+apiVersion: core.kuberik.io/v1alpha1
+kind: Movie
+metadata:
+  name: publish
+spec:
+  screenplay:
+    vars:
+    - name: GIT_COMMIT
+      valueFrom:
+        inputRef:
+          gjsonPath: after
+    - name: ref
+      valueFrom:
+        inputRef:
+          gjsonPath: ref
+    volumeClaimTemplates:
+    - metadata:
+        name: src
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 1Gi
+    scenes:
+    - name: init
+      when:
+      - ref: "master"
+      frames:
+        - name: clone-and-build
+          action:
+            template:
+              spec:
+                containers:
+                - image: golang:1.13
+                  command: ["sh"]
+                  envFrom:
+                  - secretRef:
+                      name: git
+                  args:
+                    - "-c"
+                    - |
+                      rm -rf /src/*;
+                      set -e;
+                      git clone https://$(username):$(password)@github.com/kuberik/kuberik.git /src;
+                      cd /src && git checkout $(GIT_COMMIT);
+
+                      mkdir -p /src/build/_output/bin;
+                      cd /src && go build -o build/_output/bin/kuberik -ldflags "-linkmode external -extldflags -static" -gcflags all=-trimpath=/src -asmflags all=-trimpath=/src github.com/kuberik/kuberik/cmd/manager;
+                  volumeMounts:
+                  - name: src
+                    mountPath: "/src"
+    - name: publish
+      when:
+      - ref: "master"
+      frames:
+        - name: kaniko
+          action:
+            template:
+              spec:
+                volumes:
+                - name: kaniko-docker
+                  secret:
+                    secretName: kaniko-docker
+                containers:
+                - image: gcr.io/kaniko-project/executor:v0.13.0
+                  envFrom:
+                  - configMapRef:
+                      name: publish-registry
+                  args:
+                  - --context=/src
+                  - --dockerfile=build/Dockerfile
+                  - --destination=$(publish_registry)/kuberik/operator:$(GIT_COMMIT)
+                  volumeMounts:
+                  - name: src
+                    mountPath: "/src"
+                  - name: kaniko-docker
+                    mountPath: "/kaniko/.docker"
+    - name: deploy
+      when:
+      - ref: "master"
+      frames:
+        - name: kubectl
+          action:
+            template:
+              spec:
+                serviceAccount: deploy
+                containers:
+                - image: bitnami/kubectl:1.14.3
+                  envFrom:
+                  - configMapRef:
+                      name: publish-registry
+                  args:
+                  - patch
+                  - deployment
+                  - kuberik
+                  - --type=json
+                  - -p
+                  - '[{"op": "replace", "path": "/spec/template/spec/containers/0/image", "value":"$(publish_registry)/kuberik/operator:$(GIT_COMMIT)"}]'

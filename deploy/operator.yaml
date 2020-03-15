@@ -1,0 +1,38 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kuberik
+spec:
+  replicas: 1
+  template:
+    spec:
+      serviceAccountName: kuberik
+      containers:
+        - name: kuberik
+          # Replace this with the built image name
+          image: kuberik
+          command:
+          - kuberik
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+              value: ""
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "kuberik"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kuberik
+spec:
+  ports:
+  - name: http
+    port: 8080
+    protocol: TCP
+    targetPort: 8080
+  type: ClusterIP
