@@ -10,11 +10,11 @@ DSL of Kuberik should be driven by scheduling capabilities and not by convenienc
 
 ## YAML Composition
 
-As Kuberik pipeline is defined a single YAML file, logical demand is to split a huge YAML file into multiple smaller ones. There are already some sollutions which are trying to solve this, especially in Kubernetes space. In theory, this can be achieved with any programming language that can output YAML. Kuberik pipeline is **a model** and therefore model generation and composition is highly encouraged.
+As Kuberik pipeline is defined a single YAML file, logical demand is to split a huge YAML file into multiple smaller ones. There are already some solutions which are trying to solve this, especially in Kubernetes space. In theory, this can be achieved with any programming language that can output YAML. Kuberik pipeline is **a model** and therefore model generation and composition is highly encouraged.
 
 ## Dependency Management
 
-If you want to use YAML composition, it's likely that you'll also need some sort of dependency management. Dependancy management is a problem in itself and every software that needs it struggles to implement it well. Therefore, we'd recommend to rely directly on dependency management solutions of whatever technology you use for YAML composition rather than building one from scratch.
+If you want to use YAML composition, it's likely that you'll also need some sort of dependency management. Dependency management is a problem in itself and every software that needs it struggles to implement it well. Therefore, we'd recommend to rely directly on dependency management solutions of whatever technology you use for YAML composition rather than building one from scratch.
 
 ## Built-in Integrations
 

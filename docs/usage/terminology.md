@@ -9,7 +9,7 @@ A *Screenplay* is the main abstraction in a *Kuberik* workflow. It contains a li
 [See the full screenplay reference](./screenplay-reference.md).
 
 ## Movie
-Movie is a a [CRD] which describes a screenplay. To run a screenplay, an instance of [Play] needs to be created from the movie's template. An instance can be created manually with kuberik CLI or automatically by a screener.
+Movie is a [CRD] which describes a screenplay. To run a screenplay, an instance of [Play] needs to be created from the movie's template. An instance can be created manually with Kuberik CLI or automatically by a screener.
 
 ## Play
 Play is an instance of a [Movie].
@@ -32,12 +32,16 @@ Story is defined as a nested [Screenplay] inside of a [Frame].
 
 ```yaml
 scenes:
+- name: hello
+  frames:
   - name: hello
-    frames:
-      - name: hello
-        action:
-          command: ["echo", "Hello Dave."]
-          image: alpine
+    action:
+      template:
+        spec:
+          containers:
+          - name: hello
+            command: ["echo", "Hello Dave."]
+            image: alpine
 ```
 
 [Movie]: #movie

@@ -4,7 +4,7 @@
 
 ### Variables
 
-To define variables shared by all jobs, define the variables field on the screenplay. You can see a detailed definition of each variable in [Vars section of API reference](./screenplay-fields.md#variable). These variables are available in all jobs as environment variables and are also mounted as file under `/kuberik` in every container.
+To define variables shared by all jobs, define the variables field on the screenplay. You can see a detailed definition of each variable in [Vars section of API reference](./api-reference.md#variable). These variables are available in all jobs as environment variables and are also mounted as file under `/kuberik/vars` in every container.
 
 ```yaml
 screenplay:

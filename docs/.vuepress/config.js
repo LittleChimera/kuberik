@@ -50,8 +50,9 @@ function getContributingSidebar() {
     collapsable: false,
     sidebarDepth: 2,
     children: [
-      'philosophy',
-      'design',
+      'core-principles',
+      'architecture',
+      'design-goals',
       'non-goals',
       'pipeline-features',
     ]
@@ -66,8 +67,6 @@ function getUsageSidebar() {
     children: [
       ['', 'Introduction'],
       'terminology',
-      'screenplay-reference',
-      'movie-reference',
       'screeners',
     ]
   }, {
@@ -75,7 +74,7 @@ function getUsageSidebar() {
     collapsable: false,
     sidebarDepth: 2,
     children: [
-      'screenplay-fields',
+      'api-reference',
     ]
   }]
 }
