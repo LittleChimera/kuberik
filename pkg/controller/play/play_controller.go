@@ -145,16 +145,16 @@ func (r *ReconcilePlay) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 
 		// TODO populate configMapRef instead of value to be able to retrieve vars dynamically
-		for vi := range instance.Spec.Screenplay.Vars {
+		for vi := range instance.Spec.Vars {
 			for k, v := range varsConfigMap.Data {
-				if k == instance.Spec.Screenplay.Vars[vi].Name {
-					instance.Spec.Screenplay.Vars[vi].Value = v
+				if k == instance.Spec.Vars[vi].Name {
+					instance.Spec.Vars[vi].Value = v
 				}
 			}
 		}
 
 		log.Info(fmt.Sprintf("Running play %s", instance.Name))
-		populateRandomIDs(&instance.Spec.Screenplay)
+		populateRandomIDs(&instance.Spec)
 		err = r.client.Update(context.TODO(), instance)
 		if err != nil {
 			return reconcile.Result{Requeue: true}, err
@@ -190,11 +190,13 @@ func (r *ReconcilePlay) Reconcile(request reconcile.Request) (reconcile.Result, 
 	return reconcile.Result{}, nil
 }
 
-func populateRandomIDs(screenplay *corev1alpha1.Screenplay) {
+func populateRandomIDs(playSpec *corev1alpha1.PlaySpec) {
 	var frames []*corev1alpha1.Frame
-	for i := range screenplay.Scenes {
-		for j := range screenplay.Scenes[i].Frames {
-			frames = append(frames, &(screenplay.Scenes[i].Frames[j]))
+	for k := range playSpec.Screenplays {
+		for i := range playSpec.Screenplays[k].Scenes {
+			for j := range playSpec.Screenplays[k].Scenes[i].Frames {
+				frames = append(frames, &(playSpec.Screenplays[k].Scenes[i].Frames[j]))
+			}
 		}
 	}
 
@@ -207,7 +209,7 @@ func populateRandomIDs(screenplay *corev1alpha1.Screenplay) {
 func provisionVarsConfigMap(instance *corev1alpha1.Play) error {
 	varsConfigMapName := fmt.Sprintf("%s-vars", instance.Name)
 	configMapValues := make(map[string]string)
-	for _, v := range instance.Spec.Screenplay.Vars {
+	for _, v := range instance.Spec.Vars {
 		configMapValues[v.Name] = v.Value
 	}
 	varsConfigMap := &corev1.ConfigMap{
@@ -232,7 +234,7 @@ func provisionVolumes(play *corev1alpha1.Play) (err error) {
 		play.Status.ProvisionedVolumes = make(map[string]string)
 	}
 
-	for _, volumeClaimTemplate := range play.Spec.Screenplay.VolumeClaimTemplates {
+	for _, volumeClaimTemplate := range play.Spec.VolumeClaimTemplates {
 		pvcName := fmt.Sprintf("%s-%s", play.Name, volumeClaimTemplate.Name)
 
 		err = config.Client.Create(context.TODO(), &corev1.PersistentVolumeClaim{

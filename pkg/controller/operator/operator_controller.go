@@ -1,8 +1,6 @@
 package operator
 
 import (
-	"fmt"
-
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -83,10 +81,6 @@ func (r *ReconcileOperator) Reconcile(request reconcile.Request) (reconcile.Resu
 			Version:  r.resource.Version,
 			Resource: r.resource.plural(),
 		}).Namespace(request.Namespace).Get(request.Name, metav1.GetOptions{})
-
-	if r.movie.Screenplay == nil {
-		return reconcile.Result{}, fmt.Errorf("Screenplay not defined for movie: %s", r.movie.Name)
-	}
 
 	// objectJSON, err := object.MarshalJSON()
 	_, err := object.MarshalJSON()

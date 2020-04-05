@@ -30,7 +30,7 @@ ln -s ${dir}/.. ${GOPATH}/src/github.com/kuberik/kuberik
 
 set -e
 
-${GOPATH}/src/k8s.io/code-generator/generate-internal-groups.sh client,defaulter github.com/kuberik/kuberik/pkg/generated "" github.com/kuberik/kuberik/pkg/apis "core:v1alpha1"
+${GOPATH}/src/k8s.io/code-generator/generate-internal-groups.sh client github.com/kuberik/kuberik/pkg/generated "" github.com/kuberik/kuberik/pkg/apis "core:v1alpha1"
 
 mkdir -p pkg/generated
 cp -r github.com/kuberik/kuberik/pkg/* pkg/

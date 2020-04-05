@@ -11,11 +11,20 @@ import (
 // +k8s:openapi-gen=true
 type MovieSpec struct {
 	// TODO remove this
-	Name       string      `json:"-" yaml:"-"`
-	Screenplay *Screenplay `json:"screenplay"`
+	Template PlayTemplate `json:"template"`
+	// +optional
+	FailedJobsHistoryLimit int `json:"failedJobsHistoryLimit"`
+	// +optional
+	SuccessfulJobsHistoryLimit int `json:"successfulJobsHistoryLimit"`
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
+}
+
+// PlayTemplate defines a template of Play to be created from a Movie
+type PlayTemplate struct {
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	Spec              PlaySpec `json:"spec,omitempty"`
 }
 
 // MovieStatus defines the observed state of Movie
