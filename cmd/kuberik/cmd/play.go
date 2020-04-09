@@ -91,7 +91,7 @@ func parseVars(varInputs ...string) (vars []corev1alpha1.Var, err error) {
 func populateVars(play *corev1alpha1.Play, vars ...corev1alpha1.Var) error {
 	for _, v := range vars {
 
-		if err := play.Spec.Screenplay.Vars.Set(v.Name, v.Value); err != nil {
+		if err := play.Spec.Vars.Set(v.Name, v.Value); err != nil {
 			return err
 		}
 	}
@@ -104,9 +104,7 @@ func playFromMovie(movie *corev1alpha1.Movie) corev1alpha1.Play {
 			GenerateName: fmt.Sprintf("%s-", movie.Name),
 			Namespace:    movie.Namespace,
 		},
-		Spec: corev1alpha1.PlaySpec{
-			Screenplay: *movie.Spec.Screenplay,
-		},
+		Spec: movie.Spec.Template.Spec,
 		Status: corev1alpha1.PlayStatus{
 			Phase:  corev1alpha1.PlayCreated,
 			Frames: make(map[string]int),

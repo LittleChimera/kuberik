@@ -4,16 +4,19 @@ kind: Movie
 metadata:
   name: hello-world
 spec:
-  screenplay:
-    scenes:
-      - name: hello-world
-        frames:
+  template:
+    spec:
+      screenplays:
+      - name: main
+        scenes:
           - name: hello-world
-            action:
-              template:
-                spec:
-                  containers:
-                  - name: hello-world
-                    image: "alpine:latest"
-                    command: ["echo"]
-                    args: ["Hello World!"]
+            frames:
+              - name: hello-world
+                action:
+                  template:
+                    spec:
+                      containers:
+                      - name: hello-world
+                        image: "alpine:latest"
+                        command: ["echo"]
+                        args: ["Hello World!"]

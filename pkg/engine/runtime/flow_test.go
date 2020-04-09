@@ -14,7 +14,7 @@ func TestExpandLoops(t *testing.T) {
 				Frames: []corev1alpha1.Frame{
 					corev1alpha1.Frame{
 						Copies: 3,
-						Action: corev1alpha1.Exec{
+						Action: &corev1alpha1.Exec{
 							Template: corev1.PodTemplateSpec{
 								Spec: corev1.PodSpec{
 									Containers: []corev1.Container{
@@ -28,7 +28,11 @@ func TestExpandLoops(t *testing.T) {
 			},
 		},
 	}
-	expandCopies(&screenplay)
+	expandCopies(&corev1alpha1.PlaySpec{
+		Screenplays: []corev1alpha1.Screenplay{
+			screenplay,
+		},
+	})
 
 	if len(screenplay.Scenes[0].Frames) != 3 {
 		t.Errorf("Expand loop doesn't add new frames")
