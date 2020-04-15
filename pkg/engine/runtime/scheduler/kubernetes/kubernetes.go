@@ -3,7 +3,6 @@ package kubernetes
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 
 	"k8s.io/client-go/kubernetes"
@@ -30,44 +29,38 @@ var updateLock sync.Mutex
 
 // KubernetesRuntime defines a Scheduler which executes Plays on Kubernetes
 type KubernetesRuntime struct {
-	config           *rest.Config
-	kubernetesClient *kubernetes.Clientset
-	// kuberikClient    *clientv1alpha1.CoreV1alpha1Client
+	config *rest.Config
+	client *kubernetes.Clientset
 }
 
 // NewKubernetesRuntime create a new NewKubernetesRuntime
 func NewKubernetesRuntime(c *rest.Config) *KubernetesRuntime {
-	kubernetesClient, _ := kubernetes.NewForConfig(c)
-	// kuberikClient, _ := clientv1alpha1.NewForConfig(c)
+	client, _ := kubernetes.NewForConfig(c)
 
 	return &KubernetesRuntime{
-		config:           c,
-		kubernetesClient: kubernetesClient,
-		// kuberikClient:    kuberikClient,
+		config: c,
+		client: client,
 	}
 }
 
 // Run creates an execution on Kubernetes
-func (r *KubernetesRuntime) Run(name string, namespace corev1.Namespace, e corev1alpha1.Exec) (io.Reader, chan int, error) {
-	if len(name) > maxJobNameLength {
-		name = name[:maxJobNameLength]
-	}
-	reader, writer := io.Pipe()
+func (r *KubernetesRuntime) Run(play *corev1alpha1.Play, frameID string) (chan int, error) {
 	result := make(chan int)
 
-	jobDefinition := newRunJob(name, &e)
+	jobDefinition := newRunJob(play, frameID)
 	// Try to recover first
-	jobInstance, err := r.kubernetesClient.BatchV1().Jobs(namespace.Name).Get(jobDefinition.GetName(), metav1.GetOptions{})
+	jobInstance, err := r.client.BatchV1().Jobs(play.Namespace).Get(jobDefinition.GetName(), metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		jobInstance, err = r.kubernetesClient.BatchV1().Jobs(namespace.Name).Create(newRunJob(name, &e))
+		jobInstance, err = r.client.BatchV1().Jobs(play.Namespace).Create(jobDefinition)
 	}
+	// TODO retry
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	go r.watchJob(writer, result, jobInstance)
+	go r.watchJob(result, jobInstance)
 
-	return reader, result, nil
+	return result, nil
 }
 
 var (
@@ -75,7 +68,8 @@ var (
 	zero     int32 = 0
 )
 
-func newRunJob(name string, e *corev1alpha1.Exec) *batchv1.Job {
+func newRunJob(play *corev1alpha1.Play, frameID string) *batchv1.Job {
+	e := play.Frame(frameID).Action
 	labels := map[string]string{
 		"runner": "kuberik",
 	}
@@ -85,14 +79,22 @@ func newRunJob(name string, e *corev1alpha1.Exec) *batchv1.Job {
 	if e.Template.Spec.RestartPolicy == "" {
 		e.Template.Spec.RestartPolicy = corev1.RestartPolicyNever
 	}
-	if len(e.Template.Spec.Containers) == 1 {
-		e.Template.Spec.Containers[0].Name = name
-	}
 
+	t := true
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
+			// maximum string for job name is 63 characters.
+			Name:   fmt.Sprintf("%.46s-%.16s", play.Name, frameID),
 			Labels: labels,
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					APIVersion: play.APIVersion,
+					Kind:       play.Kind,
+					Name:       play.Name,
+					UID:        play.UID,
+					Controller: &t,
+				},
+			},
 		},
 		Spec: *e,
 	}
@@ -101,29 +103,17 @@ func newRunJob(name string, e *corev1alpha1.Exec) *batchv1.Job {
 }
 
 func (r *KubernetesRuntime) getJobWatcher(job *batchv1.Job) watch.Interface {
-	watcher, _ := r.kubernetesClient.BatchV1().Jobs(job.Namespace).Watch(metav1.ListOptions{
+	watcher, _ := r.client.BatchV1().Jobs(job.Namespace).Watch(metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("metadata.name=%s", job.Name),
 	})
 	return watcher
 }
 
-func (r *KubernetesRuntime) watchJob(w io.WriteCloser, result chan int, jobDefinition *batchv1.Job) {
+func (r *KubernetesRuntime) watchJob(result chan int, jobDefinition *batchv1.Job) {
 	finish := func(job *batchv1.Job) bool {
 		// Successfully completed a single instance of a job
 		for _, condition := range job.Status.Conditions {
 			if condition.Type == batchv1.JobFailed || condition.Type == batchv1.JobComplete {
-				log.Infof("Job: %s has no active Pods running", job.Name)
-				/*
-					output, _ := r.clientset.CoreV1().Pods(config.Namespace).GetLogs(job.ObjectMeta.Name, &corev1.PodLogOptions{
-						Follow: true,
-					}).Stream()
-					io.Copy(w, output)
-
-					// Cleanup
-					output.Close()
-				*/
-				w.Close()
-
 				// Exit code is N where N is the number of Pods that failed. If the job
 				// ran to completion, the exit code will be 0.
 				if condition.Type == batchv1.JobComplete {
@@ -141,7 +131,7 @@ func (r *KubernetesRuntime) watchJob(w io.WriteCloser, result chan int, jobDefin
 	defer watcher.Stop()
 	results := watcher.ResultChan()
 
-	currentJob, _ := r.kubernetesClient.BatchV1().Jobs(jobDefinition.Namespace).Get(jobDefinition.GetName(), metav1.GetOptions{})
+	currentJob, _ := r.client.BatchV1().Jobs(jobDefinition.Namespace).Get(jobDefinition.GetName(), metav1.GetOptions{})
 	if finish(currentJob) {
 		return
 	}

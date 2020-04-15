@@ -10,7 +10,6 @@ import (
 // MovieSpec defines the desired state of Movie
 // +k8s:openapi-gen=true
 type MovieSpec struct {
-	// TODO remove this
 	Template PlayTemplate `json:"template"`
 	// +optional
 	FailedJobsHistoryLimit int `json:"failedJobsHistoryLimit"`

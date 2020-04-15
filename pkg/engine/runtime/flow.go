@@ -1,14 +1,12 @@
 package runtime
 
 import (
-	"bufio"
 	"fmt"
 
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
 
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
 	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler"
-	"github.com/kuberik/kuberik/pkg/kubeutils"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -16,6 +14,11 @@ import (
 const (
 	frameCopyIndexVar  = "FRAME_COPY_INDEX"
 	mainScreenplayName = "main"
+)
+
+const (
+	FrameSuccess = iota
+	FrameSubmitFailure
 )
 
 func Play(livePlay corev1alpha1.Play) error {
@@ -57,7 +60,7 @@ func playScene(livePlay corev1alpha1.Play, scene *corev1alpha1.Scene) bool {
 	for i, _ := range scene.Frames {
 		frame := scene.Frames[i]
 		go func() {
-			exit, _ := playFrame(livePlay, frame)
+			exit, _ := playFrame(livePlay, frame.ID)
 			err := scheduler.Engine.UpdateFrameResult(livePlay, frame.ID, exit)
 			if err != nil {
 				log.Warn(fmt.Errorf("Updating frame result failed: %s", err))
@@ -72,39 +75,21 @@ func playScene(livePlay corev1alpha1.Play, scene *corev1alpha1.Scene) bool {
 	}
 
 	finalizeScene(livePlay, scene.Name, exitTotal)
-	if scene.IgnoreErrors {
-		return true
-	}
 	return exitTotal == 0
 }
 
-func playFrame(livePlay corev1alpha1.Play, frame corev1alpha1.Frame) (int, error) {
-	if exit, recovered := livePlay.Status.Frames[frame.ID]; recovered {
+func playFrame(play corev1alpha1.Play, frameID string) (int, error) {
+	if exit, recovered := play.Status.Frames[frameID]; recovered {
 		return exit, nil
 	}
 
-	// maximum string for job name is 63 characters.
-	executionName := fmt.Sprintf("%.29s-%.16s-%.16s", livePlay.Name, frame.Name, frame.ID)
-	output, result, err := scheduler.RunAsync(executionName, kubeutils.NamespaceObject(livePlay.Namespace), *frame.Action)
+	result, err := scheduler.Engine.Run(&play, frameID)
 	if err != nil {
-		log.Errorf("Failed to play frame (%s): %s", frame.Name, err)
-		scheduler.Engine.UpdatePlayPhase(livePlay, corev1alpha1.PlayError)
-		return 1, err
+		log.Errorf("Failed to play %s from %s: %s", frameID, play.Name, err)
+		scheduler.Engine.UpdatePlayPhase(play, corev1alpha1.PlayError)
+		return FrameSubmitFailure, err
 	}
-	buffer := bufio.NewReaderSize(output, 32*1024)
-	for {
-		line, _, err := buffer.ReadLine()
-
-		if err != nil {
-			break
-		}
-		log.Infof("Task %s: %s", frame.Name, line)
-	}
-	exit := <-result
-	if exit != 0 && frame.IgnoreErrors {
-		exit = 0
-	}
-	return exit, nil
+	return <-result, nil
 }
 
 func finalizeScene(livePlay corev1alpha1.Play, sceneName string, exit int) {
@@ -154,7 +139,6 @@ func expandProvisionedVolumes(play *corev1alpha1.Play) {
 			for fi := range play.Spec.Screenplays[k].Scenes[si].Frames {
 			volumes:
 				for volumeName, provisionedVolumeName := range volumes {
-					// TODO expand logic for initContainers as well
 					for _, container := range play.Spec.Screenplays[k].Scenes[si].Frames[fi].Action.Template.Spec.Containers {
 						for _, m := range container.VolumeMounts {
 							if m.Name == volumeName {

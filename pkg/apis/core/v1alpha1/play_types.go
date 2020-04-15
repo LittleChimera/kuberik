@@ -63,6 +63,20 @@ type Play struct {
 	Status PlayStatus `json:"status,omitempty"`
 }
 
+// Frame gets a frame with requested identifier
+func (p *Play) Frame(frameID string) *Frame {
+	for spi, screenplay := range p.Spec.Screenplays {
+		for sci, scene := range screenplay.Scenes {
+			for fi, frame := range scene.Frames {
+				if frame.ID == frameID {
+					return &p.Spec.Screenplays[spi].Scenes[sci].Frames[fi]
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // PlayList contains a list of Play
