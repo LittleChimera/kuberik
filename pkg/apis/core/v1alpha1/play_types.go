@@ -27,7 +27,6 @@ type PlayStatus struct {
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
 	Frames             map[string]int    `json:"frames,omitempty"`
 	Phase              PlayPhaseType     `json:"phase,omitempty"`
-	Runner             string            `json:"runner,omitempty"`
 	ProvisionedVolumes map[string]string `json:"provisionedVolumes,omitempty"`
 	VarsConfigMap      string            `json:"varsConfigMap,omitempty"`
 }
@@ -37,16 +36,16 @@ type PlayPhaseType string
 
 // These are valid phases of a play.
 const (
-	// PlayComplete means the play has completed its execution.
-	PlayComplete PlayPhaseType = "Complete"
-	// PlayFailed means the play has failed its execution.
-	PlayFailed PlayPhaseType = "Failed"
-	// PlayRunning means the play is executing.
-	PlayRunning PlayPhaseType = "Running"
-	// PlayRunning means the play has been created.
-	PlayCreated PlayPhaseType = "Created"
-	// PlayError means the play ended because of an error.
-	PlayError PlayPhaseType = "Error"
+	// PlayPhaseComplete means the play has completed its execution.
+	PlayPhaseComplete PlayPhaseType = "Complete"
+	// PlayPhaseFailed means the play has failed its execution.
+	PlayPhaseFailed PlayPhaseType = "Failed"
+	// PlayPhaseRunning means the play is executing.
+	PlayPhaseRunning PlayPhaseType = "Running"
+	// PlayPhaseRunning means the play has been created.
+	PlayPhaseCreated PlayPhaseType = "Created"
+	// PlayPhaseError means the play ended because of an error.
+	PlayPhaseError PlayPhaseType = "Error"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -63,7 +62,7 @@ type Play struct {
 	Status PlayStatus `json:"status,omitempty"`
 }
 
-// Frame gets a frame with requested identifier
+// Frame gets a frame with specified identifier
 func (p *Play) Frame(frameID string) *Frame {
 	for spi, screenplay := range p.Spec.Screenplays {
 		for sci, scene := range screenplay.Scenes {
@@ -72,6 +71,16 @@ func (p *Play) Frame(frameID string) *Frame {
 					return &p.Spec.Screenplays[spi].Scenes[sci].Frames[fi]
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// Screenplay gets a Screenplay with specified name
+func (p *Play) Screenplay(name string) *Screenplay {
+	for spi, screenplay := range p.Spec.Screenplays {
+		if screenplay.Name == name {
+			return &p.Spec.Screenplays[spi]
 		}
 	}
 	return nil

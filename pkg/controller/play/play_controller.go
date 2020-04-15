@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
-	"github.com/kuberik/kuberik/pkg/engine/config"
 	kuberikRuntime "github.com/kuberik/kuberik/pkg/engine/runtime"
+	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler/kubernetes"
 	"github.com/kuberik/kuberik/pkg/randutils"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -54,9 +56,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// TODO(user): Modify this to be the types you create that are owned by the primary resource
 	// Watch for changes to secondary resource Pods and requeue the owner Play
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
+	err = c.Watch(&source.Kind{Type: &batchv1.Job{}}, &handler.EnqueueRequestForOwner{
 		IsController: true,
 		OwnerType:    &corev1alpha1.Play{},
 	})
@@ -107,35 +108,33 @@ func (r *ReconcilePlay) Reconcile(request reconcile.Request) (reconcile.Result, 
 	switch instance.Status.Phase {
 	case "":
 		err := func() error {
-			err := provisionVarsConfigMap(instance)
+			err := r.provisionVarsConfigMap(instance)
 			if err != nil {
 				return err
 			}
-			err = provisionVolumes(instance)
+			err = r.provisionVolumes(instance)
 			return err
 		}()
 
 		if err != nil {
-			instance.Status.Phase = corev1alpha1.PlayError
+			instance.Status.Phase = corev1alpha1.PlayPhaseError
 			if errUpdate := r.client.Status().Update(ctx, instance); errUpdate != nil {
-				return reconcile.Result{Requeue: true}, err
+				return reconcile.Result{}, err
 			}
 			return reconcile.Result{}, err
 		}
 
-		instance.Status.Phase = corev1alpha1.PlayCreated
-		instance.Status.Runner = config.RunnerID
+		instance.Status.Phase = corev1alpha1.PlayPhaseCreated
 		err = r.client.Status().Update(ctx, instance)
 		if err != nil {
-			return reconcile.Result{Requeue: true}, err
+			return reconcile.Result{}, err
 		}
 
-	case corev1alpha1.PlayCreated:
-		instance.Status.Phase = corev1alpha1.PlayRunning
-		instance.Status.Runner = config.RunnerID
+	case corev1alpha1.PlayPhaseCreated:
+		instance.Status.Phase = corev1alpha1.PlayPhaseRunning
 		err := r.client.Status().Update(ctx, instance)
 		if err != nil {
-			return reconcile.Result{Requeue: true}, err
+			return reconcile.Result{}, err
 		}
 
 		varsConfigMap := corev1.ConfigMap{}
@@ -154,25 +153,23 @@ func (r *ReconcilePlay) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 
 		log.Info(fmt.Sprintf("Running play %s", instance.Name))
-		populateRandomIDs(&instance.Spec)
+		r.populateRandomIDs(&instance.Spec)
 		err = r.client.Update(context.TODO(), instance)
 		if err != nil {
-			return reconcile.Result{Requeue: true}, err
+			return reconcile.Result{}, err
 		}
 		// TODO r.client.Get(ctx, request.NamespacedName, instance)
-		kuberikRuntime.Play(*instance)
-	case corev1alpha1.PlayRunning:
-		if instance.Status.Runner != config.RunnerID {
-			log.Info(fmt.Sprintf("Recovering %s/%s...", instance.Namespace, instance.Name))
-			instance.Status.Runner = config.RunnerID
-			err := r.client.Status().Update(ctx, instance)
-			if err != nil {
-				return reconcile.Result{Requeue: true}, err
-			}
-			// TODO r.client.Get(ctx, request.NamespacedName, instance)
-			kuberikRuntime.Play(*instance)
+		return reconcile.Result{}, kuberikRuntime.PlayNext(instance)
+	case corev1alpha1.PlayPhaseRunning:
+		if err := r.updateStatus(instance); err != nil {
+			return reconcile.Result{}, err
 		}
-	case corev1alpha1.PlayComplete, corev1alpha1.PlayFailed, corev1alpha1.PlayError:
+
+		if instance.Status.Phase == corev1alpha1.PlayPhaseRunning {
+			return reconcile.Result{}, kuberikRuntime.PlayNext(instance)
+		}
+		return reconcile.Result{}, nil
+	case corev1alpha1.PlayPhaseComplete, corev1alpha1.PlayPhaseFailed, corev1alpha1.PlayPhaseError:
 		for _, pvcName := range instance.Status.ProvisionedVolumes {
 			r.client.Delete(context.TODO(), &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
@@ -183,14 +180,24 @@ func (r *ReconcilePlay) Reconcile(request reconcile.Request) (reconcile.Result, 
 		}
 		instance.Status.ProvisionedVolumes = make(map[string]string)
 		err = r.client.Status().Update(context.TODO(), instance)
-		if err != nil {
-			return reconcile.Result{Requeue: true}, err
-		}
+		log.Info(fmt.Sprintf("Play %s competed with status: %s", instance.Name, instance.Status.Phase))
+		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }
 
-func populateRandomIDs(playSpec *corev1alpha1.PlaySpec) {
+func (r *ReconcilePlay) allFrames(playSpec *corev1alpha1.PlaySpec) (frames []*corev1alpha1.Frame) {
+	for k := range playSpec.Screenplays {
+		for i := range playSpec.Screenplays[k].Scenes {
+			for j := range playSpec.Screenplays[k].Scenes[i].Frames {
+				frames = append(frames, &(playSpec.Screenplays[k].Scenes[i].Frames[j]))
+			}
+		}
+	}
+	return
+}
+
+func (r *ReconcilePlay) populateRandomIDs(playSpec *corev1alpha1.PlaySpec) {
 	var frames []*corev1alpha1.Frame
 	for k := range playSpec.Screenplays {
 		for i := range playSpec.Screenplays[k].Scenes {
@@ -206,7 +213,7 @@ func populateRandomIDs(playSpec *corev1alpha1.PlaySpec) {
 	}
 }
 
-func provisionVarsConfigMap(instance *corev1alpha1.Play) error {
+func (r *ReconcilePlay) provisionVarsConfigMap(instance *corev1alpha1.Play) error {
 	varsConfigMapName := fmt.Sprintf("%s-vars", instance.Name)
 	configMapValues := make(map[string]string)
 	for _, v := range instance.Spec.Vars {
@@ -220,7 +227,7 @@ func provisionVarsConfigMap(instance *corev1alpha1.Play) error {
 		Data: configMapValues,
 	}
 
-	err := config.Client.Create(context.TODO(), varsConfigMap)
+	err := r.client.Create(context.TODO(), varsConfigMap)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
@@ -228,8 +235,55 @@ func provisionVarsConfigMap(instance *corev1alpha1.Play) error {
 	return nil
 }
 
+func (r *ReconcilePlay) updateStatus(play *corev1alpha1.Play) error {
+	jobs := &batchv1.JobList{}
+	r.client.List(context.TODO(), jobs, &client.ListOptions{
+		LabelSelector: func() labels.Selector {
+			ls, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					kubernetes.JobLabelPlay: play.Name,
+				},
+			})
+			return ls
+		}(),
+	})
+
+	var updated bool
+	for _, j := range jobs.Items {
+		frameID := j.Labels[kubernetes.JobLabelFrameID]
+		if _, ok := play.Status.Frames[frameID]; ok {
+			continue
+		}
+
+		if play.Status.Frames == nil {
+			play.Status.Frames = make(map[string]int)
+		}
+
+		updated = true
+		if finished, exit := jobResult(&j); finished {
+			play.Status.Frames[frameID] = exit
+		}
+	}
+
+	if !updated {
+		return nil
+	}
+
+	if len(r.allFrames(&play.Spec)) == len(play.Status.Frames) {
+		play.Status.Phase = corev1alpha1.PlayPhaseComplete
+	}
+
+	for _, exit := range play.Status.Frames {
+		if exit != 0 {
+			play.Status.Phase = corev1alpha1.PlayPhaseError
+		}
+	}
+
+	return r.client.Status().Update(context.TODO(), play)
+}
+
 // ProvisionVolumes provisions volumes for the duration of the play
-func provisionVolumes(play *corev1alpha1.Play) (err error) {
+func (r *ReconcilePlay) provisionVolumes(play *corev1alpha1.Play) (err error) {
 	if play.Status.ProvisionedVolumes == nil {
 		play.Status.ProvisionedVolumes = make(map[string]string)
 	}
@@ -237,7 +291,7 @@ func provisionVolumes(play *corev1alpha1.Play) (err error) {
 	for _, volumeClaimTemplate := range play.Spec.VolumeClaimTemplates {
 		pvcName := fmt.Sprintf("%s-%s", play.Name, volumeClaimTemplate.Name)
 
-		err = config.Client.Create(context.TODO(), &corev1.PersistentVolumeClaim{
+		err = r.client.Create(context.TODO(), &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      pvcName,
 				Namespace: play.Namespace,
@@ -253,6 +307,21 @@ func provisionVolumes(play *corev1alpha1.Play) (err error) {
 			return
 		}
 		play.Status.ProvisionedVolumes[volumeClaimTemplate.Name] = pvcName
+	}
+	return
+}
+
+func jobResult(job *batchv1.Job) (finished bool, exit int) {
+	// Successfully completed a single instance of a job
+	for _, condition := range job.Status.Conditions {
+		if condition.Type == batchv1.JobFailed || condition.Type == batchv1.JobComplete {
+			finished = true
+			if condition.Type == batchv1.JobComplete {
+				exit = 0
+			} else {
+				exit = 1
+			}
+		}
 	}
 	return
 }

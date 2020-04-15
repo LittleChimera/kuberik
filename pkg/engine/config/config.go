@@ -9,7 +9,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// TODO remove
 var Config *rest.Config
+
+// TODO remove
 var Client client.Client
 
 var RunnerID string

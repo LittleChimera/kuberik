@@ -6,14 +6,15 @@ import (
 	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler/kubernetes"
 )
 
+// Engine is a Engine used to schedule Actions throughout program execution
 var Engine Scheduler
 
+// Scheduler implements a way for launching Actions
 type Scheduler interface {
-	Run(play *corev1alpha1.Play, frameID string) (chan int, error)
-	UpdatePlayPhase(play corev1alpha1.Play, status corev1alpha1.PlayPhaseType) error
-	UpdateFrameResult(play corev1alpha1.Play, ID string, result int) error
+	Run(play *corev1alpha1.Play, frameID string) error
 }
 
+// InitEngine initializes Engine Engine used to schedule Actions througout program execution
 func InitEngine() {
-	Engine = kubernetes.NewKubernetesRuntime(config.Config)
+	Engine = kubernetes.NewScheduler(config.Config)
 }
