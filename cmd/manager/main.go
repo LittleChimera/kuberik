@@ -29,6 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	conf "github.com/kuberik/kuberik/pkg/engine/config"
+	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -171,4 +175,10 @@ func serveCRMetrics(cfg *rest.Config) error {
 		return err
 	}
 	return nil
+}
+
+func initEngine(config *rest.Config, client client.Client, namespace string) {
+	conf.InitConfig(config)
+	conf.InitClient(client)
+	scheduler.InitEngine()
 }

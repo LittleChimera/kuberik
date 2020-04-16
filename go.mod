@@ -2,6 +2,7 @@ module github.com/kuberik/kuberik
 
 require (
 	github.com/go-openapi/spec v0.19.4
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/operator-framework/operator-sdk v0.16.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
