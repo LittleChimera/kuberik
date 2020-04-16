@@ -1,17 +1,12 @@
 module github.com/kuberik/kuberik
 
 require (
-	github.com/go-chi/chi v4.0.2+incompatible
-	github.com/go-chi/cors v1.0.0
 	github.com/go-openapi/spec v0.19.4
-	github.com/jinzhu/gorm v1.9.10
-	github.com/mitchellh/go-homedir v1.1.0
-	github.com/operator-framework/operator-sdk v0.15.1
+	github.com/operator-framework/operator-sdk v0.16.0
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.4.0
-	github.com/tidwall/gjson v1.3.5
 	k8s.io/api v0.17.2
 	k8s.io/apiextensions-apiserver v0.17.2
 	k8s.io/apimachinery v0.17.2
