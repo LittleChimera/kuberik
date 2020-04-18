@@ -78,3 +78,6 @@ tags
 
 # Project custom
 **/node_modules
+
+# Local Netlify folder
+.netlify
