@@ -1,4 +1,4 @@
-package shell
+package scheduler
 
 import (
 	"os/exec"
@@ -6,10 +6,13 @@ import (
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
 )
 
-type Shell struct{}
+// ShellScheduler runs workloads directly on the local system
+type ShellScheduler struct{}
 
-func (s *Shell) Run(play *corev1alpha1.Play, frameID string) (chan int, error) {
-	result := make(chan int)
+var _ Scheduler = &ShellScheduler{}
+
+// Run implements Scheduler interface
+func (s *ShellScheduler) Run(play *corev1alpha1.Play, frameID string) error {
 	e := play.Frame(frameID).Action
 
 	var args []string
@@ -22,14 +25,9 @@ func (s *Shell) Run(play *corev1alpha1.Play, frameID string) (chan int, error) {
 	cmd := exec.Command(command, args...)
 
 	cmd.Start()
+	go func() {
+		cmd.Wait()
+	}()
 
-	err := cmd.Wait()
-	if _, ok := err.(*exec.ExitError); ok {
-		result <- 1
-	} else {
-		result <- 0
-	}
-	close(result)
-
-	return result, nil
+	return nil
 }

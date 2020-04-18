@@ -38,6 +38,8 @@ type PlayPhaseType string
 const (
 	// PlayPhaseComplete means the play has completed its execution.
 	PlayPhaseComplete PlayPhaseType = "Complete"
+	// PlayPhaseInit means the play is in initializing phase
+	PlayPhaseInit PlayPhaseType = "Init"
 	// PlayPhaseFailed means the play has failed its execution.
 	PlayPhaseFailed PlayPhaseType = "Failed"
 	// PlayPhaseRunning means the play is executing.

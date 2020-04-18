@@ -13,7 +13,6 @@ import (
 
 	"github.com/kuberik/kuberik/pkg/apis"
 	"github.com/kuberik/kuberik/pkg/controller"
-	"github.com/kuberik/kuberik/pkg/engine/scheduler/kubernetes"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -144,7 +143,7 @@ func main() {
 
 	log.Info("Starting the Cmd.")
 
-	scheduler.InitEngine(kubernetes.NewScheduler(cfg))
+	scheduler.InitEngine(scheduler.NewKubernetesScheduler(mgr.GetClient()))
 	// Start the Cmd
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		log.Error(err, "Manager exited non-zero")
