@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
-	kuberikRuntime "github.com/kuberik/kuberik/pkg/engine/runtime"
-	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler/kubernetes"
+	kuberikRuntime "github.com/kuberik/kuberik/pkg/engine"
+	"github.com/kuberik/kuberik/pkg/engine/scheduler/kubernetes"
 	"github.com/kuberik/kuberik/pkg/randutils"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"

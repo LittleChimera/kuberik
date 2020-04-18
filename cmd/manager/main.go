@@ -13,7 +13,7 @@ import (
 
 	"github.com/kuberik/kuberik/pkg/apis"
 	"github.com/kuberik/kuberik/pkg/controller"
-	kuberikConfig "github.com/kuberik/kuberik/pkg/engine/config"
+	"github.com/kuberik/kuberik/pkg/engine/scheduler/kubernetes"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -30,15 +30,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
 
-	conf "github.com/kuberik/kuberik/pkg/engine/config"
-	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/kuberik/kuberik/pkg/engine/scheduler"
 )
 
 // Change below variables to serve metrics on different host or port.
 var (
 	metricsPort         int32 = 8383
 	operatorMetricsPort int32 = 8686
+	host                string
 )
 var log = logf.Log.WithName("cmd")
 
@@ -94,7 +93,7 @@ func main() {
 	mgr, err := manager.New(cfg, manager.Options{
 		Namespace:          namespace,
 		MapperProvider:     restmapper.NewDynamicRESTMapper,
-		MetricsBindAddress: fmt.Sprintf("%s:%d", kuberikConfig.Host, metricsPort),
+		MetricsBindAddress: fmt.Sprintf("%s:%d", host, metricsPort),
 	})
 	if err != nil {
 		log.Error(err, "")
@@ -145,7 +144,7 @@ func main() {
 
 	log.Info("Starting the Cmd.")
 
-	initEngine(cfg, mgr.GetClient(), namespace)
+	scheduler.InitEngine(kubernetes.NewScheduler(cfg))
 	// Start the Cmd
 	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
 		log.Error(err, "Manager exited non-zero")
@@ -170,15 +169,19 @@ func serveCRMetrics(cfg *rest.Config) error {
 	// To generate metrics in other namespaces, add the values below.
 	ns := []string{operatorNs}
 	// Generate and serve custom resource specific metrics.
-	err = kubemetrics.GenerateAndServeCRMetrics(cfg, ns, filteredGVK, kuberikConfig.Host, operatorMetricsPort)
+	err = kubemetrics.GenerateAndServeCRMetrics(cfg, ns, filteredGVK, host, operatorMetricsPort)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func initEngine(config *rest.Config, client client.Client, namespace string) {
-	conf.InitConfig(config)
-	conf.InitClient(client)
-	scheduler.InitEngine()
+func init() {
+	if _, ok := os.LookupEnv("KUBERNETES_SERVICE_HOST"); ok {
+		// Running in the cluster - listen on all interfaces
+		host = "0.0.0.0"
+	} else {
+		// Running on development machine - use localhost to avoid MacOS firewall prompts
+		host = "127.0.0.1"
+	}
 }

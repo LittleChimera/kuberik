@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
-	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler"
+	"github.com/kuberik/kuberik/pkg/engine/scheduler"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -61,7 +61,7 @@ func playScene(play *corev1alpha1.Play, scene *corev1alpha1.Scene) error {
 }
 
 func playFrame(play *corev1alpha1.Play, frameID string) error {
-	err := scheduler.Engine.Run(play, frameID)
+	err := scheduler.Run(play, frameID)
 	if err != nil {
 		log.Errorf("Failed to play %s from %s: %s", frameID, play.Name, err)
 	}
