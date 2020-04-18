@@ -18,14 +18,20 @@ Project is in alpha stage. API is still a subject to change. Please do not use i
 
 ## Development
 
-### Requirements
-  - Go 1.13
-  - Operator SDK 0.15.1
+#### Dependencies
+  - kubectl 1.14+
+  - Kubernetes 1.14+
+  - Go 1.13+
+  - Operator SDK 0.16.0
 
-### Prerequisites
-  - authenticated to a Kubernetes cluster (e.g. [Kubernetes from Docker on Desktop](https://docs.docker.com/docker-for-mac/kubernetes/))
-  - applied kuberik CRDs on the cluster
-    - `kubectl apply -f deploy/crds`
+#### Prerequisites
+  - Authenticated to a Kubernetes cluster (e.g. [kind](https://kind.sigs.k8s.io/))
+  - Applied kuberik CRDs on the cluster
+    - `kubectl apply -k deploy/crds`
+  - Installed kuberik CLI
+    - `go install ./cmd/kuberik`
+
+### Running operator locally
 
 Start up the operator:
 
@@ -38,13 +44,15 @@ You can use one of the pipelines from the `docs/examples` directory to execute s
 kubectl apply -f docs/examples/hello-world.yaml
 ```
 
-Install kuberik CMD:
-
-```shell
-go install ./cmd/kuberik
-```
-
 Trigger the pipeline with `kuberik` cmd.
 ```shell
 kuberik create play --from=hello-world
+```
+
+### Testing operator locally
+
+Following runs e2e and unit tests.
+
+```shell
+make -j2 test
 ```

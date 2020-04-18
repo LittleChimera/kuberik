@@ -4,13 +4,16 @@ kind: Movie
 metadata:
   name: vars
 spec:
-  screenplay:
-    vars:
-    - name: FOO
-      value: bar
-    scenes:
-      - name: vars
-        frames:
+  template:
+    spec:
+      vars:
+      - name: FOO
+        value: bar
+      screenplays:
+      - name: main
+        scenes:
+        - name: vars
+          frames:
           - name: vars
             action:
               template:

@@ -4,10 +4,13 @@ kind: Movie
 metadata:
   name: copies
 spec:
-  screenplay:
-    scenes:
-      - name: hello
-        frames:
+  template:
+    spec:
+      screenplays:
+      - name: main
+        scenes:
+        - name: hello
+          frames:
           - name: hello
             copies: 3
             action:

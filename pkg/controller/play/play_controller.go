@@ -6,7 +6,7 @@ import (
 
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
 	kuberikRuntime "github.com/kuberik/kuberik/pkg/engine"
-	"github.com/kuberik/kuberik/pkg/engine/scheduler/kubernetes"
+	"github.com/kuberik/kuberik/pkg/engine/scheduler"
 	"github.com/kuberik/kuberik/pkg/randutils"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -14,7 +14,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -25,11 +24,6 @@ import (
 )
 
 var log = logf.Log.WithName("controller_play")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new Play Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -81,109 +75,99 @@ type ReconcilePlay struct {
 
 // Reconcile reads that state of the cluster for a Play object and makes changes based on the state read
 // and what is in the Play.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  This example creates
-// a Pod as an example
-// Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePlay) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Play")
 
-	// Fetch the Play instance
 	instance := &corev1alpha1.Play{}
 	ctx := context.TODO()
 	err := r.client.Get(ctx, request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
 
 	switch instance.Status.Phase {
-	case "":
-		err := func() error {
-			err := r.provisionVarsConfigMap(instance)
-			if err != nil {
-				return err
-			}
-			err = r.provisionVolumes(instance)
-			return err
-		}()
-
-		if err != nil {
-			instance.Status.Phase = corev1alpha1.PlayPhaseError
-			if errUpdate := r.client.Status().Update(ctx, instance); errUpdate != nil {
-				return reconcile.Result{}, err
-			}
-			return reconcile.Result{}, err
-		}
-
-		instance.Status.Phase = corev1alpha1.PlayPhaseCreated
-		err = r.client.Status().Update(ctx, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-	case corev1alpha1.PlayPhaseCreated:
-		instance.Status.Phase = corev1alpha1.PlayPhaseRunning
-		err := r.client.Status().Update(ctx, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		varsConfigMap := corev1.ConfigMap{}
-		err = r.client.Get(context.TODO(), types.NamespacedName{Name: instance.Status.VarsConfigMap, Namespace: instance.Namespace}, &varsConfigMap)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		// TODO populate configMapRef instead of value to be able to retrieve vars dynamically
-		for vi := range instance.Spec.Vars {
-			for k, v := range varsConfigMap.Data {
-				if k == instance.Spec.Vars[vi].Name {
-					instance.Spec.Vars[vi].Value = v
-				}
-			}
-		}
-
-		log.Info(fmt.Sprintf("Running play %s", instance.Name))
-		r.populateRandomIDs(&instance.Spec)
-		err = r.client.Update(context.TODO(), instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		// TODO r.client.Get(ctx, request.NamespacedName, instance)
-		return reconcile.Result{}, kuberikRuntime.PlayNext(instance)
+	case "", corev1alpha1.PlayPhaseCreated:
+		return r.reconcileCreated(instance)
+	case corev1alpha1.PlayPhaseInit:
+		return r.reconcileInit(instance)
 	case corev1alpha1.PlayPhaseRunning:
-		if err := r.updateStatus(instance); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		if instance.Status.Phase == corev1alpha1.PlayPhaseRunning {
-			return reconcile.Result{}, kuberikRuntime.PlayNext(instance)
-		}
-		return reconcile.Result{}, nil
+		return r.reconcileRunning(instance)
 	case corev1alpha1.PlayPhaseComplete, corev1alpha1.PlayPhaseFailed, corev1alpha1.PlayPhaseError:
-		for _, pvcName := range instance.Status.ProvisionedVolumes {
-			r.client.Delete(context.TODO(), &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      pvcName,
-					Namespace: instance.Namespace,
-				},
-			})
-		}
-		instance.Status.ProvisionedVolumes = make(map[string]string)
-		err = r.client.Status().Update(context.TODO(), instance)
-		log.Info(fmt.Sprintf("Play %s competed with status: %s", instance.Name, instance.Status.Phase))
-		return reconcile.Result{}, err
+		return r.reconcileComplete(instance)
 	}
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcilePlay) reconcileCreated(instance *corev1alpha1.Play) (reconcile.Result, error) {
+	instance.Status.Phase = corev1alpha1.PlayPhaseInit
+	err := r.client.Status().Update(context.TODO(), instance)
+	return reconcile.Result{}, err
+}
+
+func (r *ReconcilePlay) reconcileInit(instance *corev1alpha1.Play) (reconcile.Result, error) {
+	err := func() error {
+		err := r.provisionVarsConfigMap(instance)
+		if err != nil {
+			return err
+		}
+		err = r.provisionVolumes(instance)
+		return err
+	}()
+
+	if err != nil {
+		instance.Status.Phase = corev1alpha1.PlayPhaseError
+		if errUpdate := r.client.Status().Update(context.TODO(), instance); errUpdate != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, err
+	}
+
+	instance.Status.Phase = corev1alpha1.PlayPhaseRunning
+	err = r.client.Status().Update(context.TODO(), instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	log.Info(fmt.Sprintf("Running play %s", instance.Name))
+	r.populateRandomIDs(&instance.Spec)
+	err = r.client.Update(context.TODO(), instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcilePlay) reconcileRunning(instance *corev1alpha1.Play) (reconcile.Result, error) {
+	if err := r.updateStatus(instance); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if instance.Status.Phase == corev1alpha1.PlayPhaseRunning {
+		return reconcile.Result{}, kuberikRuntime.PlayNext(instance)
+	}
+	return reconcile.Result{}, nil
+}
+
+func (r *ReconcilePlay) reconcileComplete(instance *corev1alpha1.Play) (reconcile.Result, error) {
+	for _, pvcName := range instance.Status.ProvisionedVolumes {
+		r.client.Delete(context.TODO(), &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      pvcName,
+				Namespace: instance.Namespace,
+			},
+		})
+	}
+	instance.Status.ProvisionedVolumes = make(map[string]string)
+	err := r.client.Status().Update(context.TODO(), instance)
+	log.Info(fmt.Sprintf("Play %s competed with status: %s", instance.Name, instance.Status.Phase))
+	return reconcile.Result{}, err
 }
 
 func (r *ReconcilePlay) allFrames(playSpec *corev1alpha1.PlaySpec) (frames []*corev1alpha1.Frame) {
@@ -241,7 +225,7 @@ func (r *ReconcilePlay) updateStatus(play *corev1alpha1.Play) error {
 		LabelSelector: func() labels.Selector {
 			ls, _ := metav1.LabelSelectorAsSelector(&metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					kubernetes.JobLabelPlay: play.Name,
+					scheduler.JobLabelPlay: play.Name,
 				},
 			})
 			return ls
@@ -250,7 +234,7 @@ func (r *ReconcilePlay) updateStatus(play *corev1alpha1.Play) error {
 
 	var updated bool
 	for _, j := range jobs.Items {
-		frameID := j.Labels[kubernetes.JobLabelFrameID]
+		frameID := j.Annotations[scheduler.JobAnnotationFrameID]
 		if _, ok := play.Status.Frames[frameID]; ok {
 			continue
 		}

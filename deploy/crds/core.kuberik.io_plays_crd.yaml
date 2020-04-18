@@ -8443,8 +8443,6 @@ spec:
               additionalProperties:
                 type: string
               type: object
-            runner:
-              type: string
             varsConfigMap:
               type: string
           type: object

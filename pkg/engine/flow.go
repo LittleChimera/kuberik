@@ -155,6 +155,10 @@ func populateVars(playSpec *corev1alpha1.PlaySpec, varsConfigMap string) {
 	for k, screenplay := range playSpec.Screenplays {
 		for i, scene := range screenplay.Scenes {
 			for j, frame := range scene.Frames {
+				fmt.Println(screenplay.
+					Scenes[i].
+					Frames[j].
+					Action)
 				playSpec.Screenplays[k].Scenes[i].Frames[j].Action.Template.Spec.Volumes = append(
 					screenplay.Scenes[i].Frames[j].Action.Template.Spec.Volumes,
 					corev1.Volume{

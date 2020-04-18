@@ -9,14 +9,14 @@ spec:
       screenplays:
       - name: main
         scenes:
+        - name: hello-world
+          frames:
           - name: hello-world
-            frames:
-              - name: hello-world
-                action:
-                  template:
-                    spec:
-                      containers:
-                      - name: hello-world
-                        image: "alpine:latest"
-                        command: ["echo"]
-                        args: ["Hello World!"]
+            action:
+              template:
+                spec:
+                  containers:
+                  - name: hello-world
+                    image: "alpine:latest"
+                    command: ["echo"]
+                    args: ["Hello World!"]
