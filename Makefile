@@ -11,3 +11,9 @@ e2e-test:
     --no-setup \
     --namespace default \
     --up-local
+
+docs-dev:
+	yarn --cwd docs dev
+
+docs-build:
+	yarn --cwd docs build
