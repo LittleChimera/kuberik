@@ -33,7 +33,3 @@ func (s *Shell) Run(play *corev1alpha1.Play, frameID string) (chan int, error) {
 
 	return result, nil
 }
-
-func (r *Shell) UpdatePlayPhase(play corev1alpha1.Play, phase corev1alpha1.PlayPhaseType) error {
-	return nil
-}

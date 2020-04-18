@@ -9,23 +9,21 @@ import (
 
 func TestExpandLoops(t *testing.T) {
 	screenplay := corev1alpha1.Screenplay{
-		Scenes: []corev1alpha1.Scene{
-			corev1alpha1.Scene{
-				Frames: []corev1alpha1.Frame{
-					corev1alpha1.Frame{
-						Copies: 3,
-						Action: &corev1alpha1.Exec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{
-										corev1.Container{},
-									},
-								},
+		Scenes: []corev1alpha1.Scene{{
+			Frames: []corev1alpha1.Frame{{
+				Copies: 3,
+				Action: &corev1alpha1.Exec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{},
 							},
 						},
 					},
 				},
 			},
+			},
+		},
 		},
 	}
 	expandCopies(&corev1alpha1.PlaySpec{

@@ -3,10 +3,8 @@ package runtime
 import (
 	"fmt"
 
-	_ "github.com/jinzhu/gorm/dialects/sqlite"
-
 	corev1alpha1 "github.com/kuberik/kuberik/pkg/apis/core/v1alpha1"
-	"github.com/kuberik/kuberik/pkg/engine/runtime/scheduler"
+	"github.com/kuberik/kuberik/pkg/engine/scheduler"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -16,91 +14,58 @@ const (
 	mainScreenplayName = "main"
 )
 
-const (
-	FrameSuccess = iota
-	FrameSubmitFailure
-)
+// PlayNext executes all frames that are possible to play at the current stage
+func PlayNext(play *corev1alpha1.Play) error {
+	// Expand definition
+	populateVars(&play.Spec, play.Status.VarsConfigMap)
+	expandCopies(&play.Spec)
+	expandProvisionedVolumes(play)
+	return playScreenplay(play, mainScreenplayName)
+}
 
-func Play(livePlay corev1alpha1.Play) error {
-	var mainPlay *corev1alpha1.Screenplay
-	for i := range livePlay.Spec.Screenplays {
-		if livePlay.Spec.Screenplays[i].Name == mainScreenplayName {
-			mainPlay = &livePlay.Spec.Screenplays[i]
-		}
-	}
-	if mainPlay == nil {
+func playScreenplay(play *corev1alpha1.Play, name string) error {
+	screenplay := play.Screenplay(name)
+	if screenplay == nil {
 		return fmt.Errorf("Play doesn't have a main screenplay")
 	}
-	populateVars(&livePlay.Spec, livePlay.Status.VarsConfigMap)
-	expandCopies(&livePlay.Spec)
-	expandProvisionedVolumes(&livePlay)
-	go func() {
-		success := true
-		for i, _ := range mainPlay.Scenes {
-			success = success && playScene(livePlay, &mainPlay.Scenes[i])
-			if !success {
-				break
-			}
+
+	for si := range screenplay.Scenes {
+		sceneFinished := true
+		for _, frame := range screenplay.Scenes[si].Frames {
+			_, ok := play.Status.Frames[frame.ID]
+			sceneFinished = sceneFinished && ok
 		}
 
-		var playEnd corev1alpha1.PlayPhaseType
-		if success {
-			playEnd = corev1alpha1.PlayComplete
-		} else {
-			playEnd = corev1alpha1.PlayFailed
+		if sceneFinished {
+			continue
 		}
-		scheduler.Engine.UpdatePlayPhase(livePlay, playEnd)
-	}()
+
+		return playScene(play, &screenplay.Scenes[si])
+	}
+
+	return corev1alpha1.NewError(corev1alpha1.NoMoreFrames)
+}
+
+func playScene(play *corev1alpha1.Play, scene *corev1alpha1.Scene) error {
+	// var exit int
+	for _, frame := range scene.Frames {
+		if _, ok := play.Status.Frames[frame.ID]; ok {
+			continue
+		}
+		err := playFrame(play, frame.ID)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func playScene(livePlay corev1alpha1.Play, scene *corev1alpha1.Scene) bool {
-	// var exit int
-	exits := make(chan int)
-	for i, _ := range scene.Frames {
-		frame := scene.Frames[i]
-		go func() {
-			exit, _ := playFrame(livePlay, frame.ID)
-			err := scheduler.Engine.UpdateFrameResult(livePlay, frame.ID, exit)
-			if err != nil {
-				log.Warn(fmt.Errorf("Updating frame result failed: %s", err))
-			}
-			exits <- exit
-		}()
-	}
-
-	exitTotal := 0
-	for _ = range scene.Frames {
-		exitTotal = <-exits | exitTotal
-	}
-
-	finalizeScene(livePlay, scene.Name, exitTotal)
-	return exitTotal == 0
-}
-
-func playFrame(play corev1alpha1.Play, frameID string) (int, error) {
-	if exit, recovered := play.Status.Frames[frameID]; recovered {
-		return exit, nil
-	}
-
-	result, err := scheduler.Engine.Run(&play, frameID)
+func playFrame(play *corev1alpha1.Play, frameID string) error {
+	err := scheduler.Run(play, frameID)
 	if err != nil {
 		log.Errorf("Failed to play %s from %s: %s", frameID, play.Name, err)
-		scheduler.Engine.UpdatePlayPhase(play, corev1alpha1.PlayError)
-		return FrameSubmitFailure, err
 	}
-	return <-result, nil
-}
-
-func finalizeScene(livePlay corev1alpha1.Play, sceneName string, exit int) {
-	if exit != 0 {
-		scheduler.Engine.UpdatePlayPhase(livePlay, corev1alpha1.PlayFailed)
-	}
-
-	// Scene failed so don't proceed onto the next one.
-	if exit != 0 {
-		return
-	}
+	return err
 }
 
 func expandCopies(playSpec *corev1alpha1.PlaySpec) {

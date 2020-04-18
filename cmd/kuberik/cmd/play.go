@@ -106,7 +106,7 @@ func playFromMovie(movie *corev1alpha1.Movie) corev1alpha1.Play {
 		},
 		Spec: movie.Spec.Template.Spec,
 		Status: corev1alpha1.PlayStatus{
-			Phase:  corev1alpha1.PlayCreated,
+			Phase:  corev1alpha1.PlayPhaseCreated,
 			Frames: make(map[string]int),
 		},
 	}

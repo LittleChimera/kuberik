@@ -1,0 +1,6 @@
+---
+resources:
+- core.kuberik.io_events_crd.yaml
+- core.kuberik.io_movies_crd.yaml
+- core.kuberik.io_plays_crd.yaml
+- core.kuberik.io_screeners_crd.yaml
